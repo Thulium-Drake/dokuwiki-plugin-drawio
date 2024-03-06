@@ -13,6 +13,8 @@ if (!defined('DOKU_INC')) {
     die();
 }
 
+use \dokuwiki\ChangeLog\MediaChangeLog;
+
 class syntax_plugin_drawio extends DokuWiki_Syntax_Plugin
 {
     /**
@@ -88,10 +90,9 @@ class syntax_plugin_drawio extends DokuWiki_Syntax_Plugin
         if(!in_array($extension,array_map('trim',explode(",",$this->getConf('toolbar_possible_extension'))) )){
             $media_id .= ".png";
         }
-		
-		$current_id = getID();
+        $current_id = getID();
 
-        $media_id = (new MediaResolver($current_id))->resolveId($media_id);
+        $media_id = (new MediaResolver($current_id))->resolveId($media_id,$renderer->date_at,true);
         $exists = media_exists($media_id);
 				
         if(!$exists){
@@ -100,7 +101,12 @@ class syntax_plugin_drawio extends DokuWiki_Syntax_Plugin
                         src='".DOKU_BASE."lib/plugins/drawio/blank-image.png' 
                         alt='".$media_id."' />";
         }elseif($extension == 'svg') {
-            $filename = mediaFN($media_id);
+            $rev = '';
+            if ($renderer->date_at) {
+                $changelog = new MediaChangeLog($media_id);
+                $rev = $changelog->getLastRevisionAt($renderer->date_at);
+            }
+            $filename = mediaFN($media_id, $rev);
             $svg = simplexml_load_file($filename);
             $width = $svg["width"];
             $heigth = $svg["height"];
@@ -121,9 +127,14 @@ class syntax_plugin_drawio extends DokuWiki_Syntax_Plugin
                 $style .= "cursor:pointer;";
                 $onclick = "onclick='edit(this);";
             }
+            $more = [];
+            if ($renderer->date_at) {
+                $changelog = new MediaChangeLog($media_id);
+                $more['rev'] = $changelog->getLastRevisionAt($renderer->date_at);
+            }
             $renderer->doc .= "<img class='mediacenter' id='".$media_id."' 
                         style='".$style."' ".$onclick."'
-                        src='".DOKU_BASE."lib/exe/fetch.php?media=".$media_id."' 
+                        src='". ml($media_id, $more) ."' 
                         alt='".$media_id."' />";
         }
 
