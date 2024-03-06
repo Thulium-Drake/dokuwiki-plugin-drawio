@@ -69,7 +69,13 @@ class syntax_plugin_drawio extends DokuWiki_Syntax_Plugin
     {
         global $lang;
 
-        if ($mode !== 'xhtml') {
+        if ($mode === 'metadata') {
+            global $ID;
+            $media_id = $data;
+            $src = (new \dokuwiki\File\MediaResolver($ID))->resolveId($media_id);
+            $file = mediaFN($src);
+            $renderer->meta['relation']['media'][$src] = file_exists($file);
+        } elseif ($mode !== 'xhtml') {
             return false;
         }
 		$renderer->nocache();
