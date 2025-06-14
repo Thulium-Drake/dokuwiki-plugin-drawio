@@ -7,9 +7,13 @@
  */
 
 // must be run within Dokuwiki
+use dokuwiki\File\MediaResolver;
+
 if (!defined('DOKU_INC')) {
     die();
 }
+
+use \dokuwiki\ChangeLog\MediaChangeLog;
 
 class syntax_plugin_drawio extends DokuWiki_Syntax_Plugin
 {
@@ -65,7 +69,15 @@ class syntax_plugin_drawio extends DokuWiki_Syntax_Plugin
      */
     public function render($mode, Doku_Renderer $renderer, $data)
     {
-        if ($mode !== 'xhtml') {
+        global $lang;
+
+        if ($mode === 'metadata') {
+            global $ID;
+            $media_id = $data;
+            $src = (new \dokuwiki\File\MediaResolver($ID))->resolveId($media_id);
+            $file = mediaFN($src);
+            $renderer->meta['relation']['media'][$src] = file_exists($file);
+        } elseif ($mode !== 'xhtml') {
             return false;
         }
 		$renderer->nocache();
@@ -74,26 +86,68 @@ class syntax_plugin_drawio extends DokuWiki_Syntax_Plugin
         global $conf;
         $media_id = $data;
         // if no extention specified, use png
-        if(!in_array(pathinfo($media_id, PATHINFO_EXTENSION),array_map('trim',explode(",",$this->getConf('toolbar_possible_extension'))) )){
+        $extension = strtolower(pathinfo($media_id, PATHINFO_EXTENSION));
+        if(!in_array($extension,array_map('trim',explode(",",$this->getConf('toolbar_possible_extension'))) )){
             $media_id .= ".png";
         }
-		
-		$current_id = getID();
-		$current_ns = getNS($current_id);
-		
-		resolve_mediaid($current_ns, $media_id, $exists);
+        $current_id = getID();
+
+        $media_id = (new MediaResolver($current_id))->resolveId($media_id,$renderer->date_at,true);
+        $exists = media_exists($media_id);
 				
         if(!$exists){
             $renderer->doc .= "<img class='mediacenter' id='".$media_id."' 
                         style='max-width:100%;cursor:pointer;' onclick='edit(this);'
                         src='".DOKU_BASE."lib/plugins/drawio/blank-image.png' 
                         alt='".$media_id."' />";
-            return true;
-        }
-        $renderer->doc .= "<img class='mediacenter' id='".$media_id."' 
-                        style='max-width:100%;cursor:pointer;' onclick='edit(this);'
-						src='".DOKU_BASE."lib/exe/fetch.php?media=".$media_id."' 
+        }elseif($extension == 'svg') {
+            $rev = '';
+            if ($renderer->date_at) {
+                $changelog = new MediaChangeLog($media_id);
+                $rev = $changelog->getLastRevisionAt($renderer->date_at);
+            }
+            $filename = mediaFN($media_id, $rev);
+            $svg = simplexml_load_file($filename);
+            $width = $svg["width"];
+            $heigth = $svg["height"];
+            $svg->addAttribute("class", "mediacenter");
+            $svg->addAttribute("id", $media_id);
+            $style = "width:".$width.";height:".$heigth.";";
+            if(!$this->getConf('edit_button')) {
+                $style .= "cursor:pointer;";
+                $svg->addAttribute("onclick", "edit(this);");
+            }
+            $svg->addAttribute("style", $style);
+            // we need parent div here to correctly replace the svg after edit
+            $renderer->doc .= "<div>".$svg->asXML()."</div>";
+        } else {
+            $style = "max-width:100%;";
+            $onclick = "";
+            if(!$this->getConf('edit_button')) {
+                $style .= "cursor:pointer;";
+                $onclick = "onclick='edit(this);";
+            }
+            $more = [];
+            if ($renderer->date_at) {
+                $changelog = new MediaChangeLog($media_id);
+                $more['rev'] = $changelog->getLastRevisionAt($renderer->date_at);
+            }
+            $renderer->doc .= "<img class='mediacenter' id='".$media_id."' 
+                        style='".$style."' ".$onclick."'
+                        src='". ml($media_id, $more) ."' 
                         alt='".$media_id."' />";
+        }
+
+        if($this->getConf('edit_button')) {
+            $auth = auth_quickaclcheck(getNS($media_id).':*');
+            $auth_ow = (($conf['mediarevisions']) ? AUTH_UPLOAD : AUTH_DELETE);
+            if ($auth >= $auth_ow) {
+                $renderer->doc .= "<button type='submit' style='display:block;font-size:75%;margin:0.5em auto 0;'
+                            data-image-id='" . $media_id . "' onclick='edit_button(this)'>
+                            ".$lang['btn_secedit']." (draw.io)
+                            </button>";
+            }
+        }
         return true;
     }
 }

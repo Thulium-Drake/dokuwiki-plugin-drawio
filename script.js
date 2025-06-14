@@ -5,6 +5,13 @@ var initial = null;
 var name = null;
 var imagePointer = null;
 
+function edit_button(editButton)
+{
+    var imageId = editButton.getAttribute('data-image-id');
+    var image = document.getElementById(imageId);
+    edit(image);
+}
+
 function edit(image)
 {   
     // check auth
@@ -168,17 +175,27 @@ function edit_cb(image)
                 else if (msg.format == 'svg') 
                 {
                     // Extracts SVG DOM from data URI to enable links
-                    imgData = atob(msg.data.substring(msg.data.indexOf(',') + 1));
-                    var tdElement = document.getElementById(image.id);
-                    var trElement=  tdElement.parentNode;
-                    var svgImg= document.createElement('svg');
-                    svgImg.setAttribute("class","mediacenter");
-                    svgImg.setAttribute("style","max-width:100%;cursor:pointer;");
-                    svgImg.setAttribute('onclick','edit(this);');
-                    svgImg.id=image.id;
-                    svgImg.innerHTML=imgData;
-                    trElement.replaceChild(svgImg,tdElement);
-                    trElement.style.textAlign = "center" ;
+                    var imgBase64 = msg.data.substring(msg.data.indexOf(',') + 1);
+                    // fix utf-8 encoding problem
+                    // https://stackoverflow.com/questions/30106476/using-javascripts-atob-to-decode-base64-doesnt-properly-decode-utf-8-strings
+                    imgData = decodeURIComponent(atob(imgBase64).split('').map(function(c) {
+                        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+                    }).join(''));
+                    var oldSvgElement = document.getElementById(image.id);
+                    var oldSvgElementOnclick = oldSvgElement.getAttribute("onclick");
+                    var odlSvgParentNode = oldSvgElement.parentNode;
+                    odlSvgParentNode.innerHTML = imgData;
+                    var newSvgElement = odlSvgParentNode.firstElementChild;
+                    var wigth = newSvgElement.getAttribute("width");
+                    var height = newSvgElement.getAttribute("height");
+                    newSvgElement.style.width = wigth;
+                    newSvgElement.style.height = height;
+                    newSvgElement.setAttribute("class","mediacenter");
+                    if (oldSvgElementOnclick != null) { // previous svg has onclick property - keep it here
+                        newSvgElement.style.cursor = "pointer";
+                        newSvgElement.setAttribute('onclick', 'edit(this);');
+                    }
+                    newSvgElement.id=image.id;
                 }
                 
                 localStorage.setItem(name, JSON.stringify({lastModified: new Date(), data: imgData}));
